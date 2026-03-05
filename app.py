@@ -1,111 +1,123 @@
 import streamlit as st
-import pandas as pd
 
-# 1. BASE DE DATOS DE CULTIVOS (Valores referenciales por ha/año para producción media)
-CROP_DATABASE = {
-    "Café (Producción)": {"N": 200, "P2O5": 50, "K2O": 250, "Info": "Basado en 3000 kg café pergamino/ha"},
-    "Cacao (Adulto)": {"N": 100, "P2O5": 60, "K2O": 120, "Info": "Basado en 1000 kg grano seco/ha"},
-    "Caña de Azúcar": {"N": 150, "P2O5": 80, "K2O": 200, "Info": "Promedio para caña planta/soca"},
-    "Cítricos (Naranja/Limón)": {"N": 160, "P2O5": 50, "K2O": 150, "Info": "Árboles en plena producción (8+ años)"},
-    "Personalizado": {"N": 0, "P2O5": 0, "K2O": 0, "Info": "Ingrese sus propios valores"}
+# Configuración para móvil
+st.set_page_config(page_title="FertiliApp 2026", layout="centered")
+
+# --- BASE DE DATOS ---
+CULTIVOS = {
+    "Café": {"N": 200, "P2O5": 50, "K2O": 250},
+    "Cacao": {"N": 100, "P2O5": 60, "K2O": 120},
+    "Caña de Azúcar": {"N": 160, "P2O5": 80, "K2O": 190},
+    "Cítricos": {"N": 150, "P2O5": 45, "K2O": 140},
+    "Manual": {"N": 0, "P2O5": 0, "K2O": 0}
 }
 
-# 2. BASE DE DATOS DE FERTILIZANTES
 FERTILIZANTES = {
-    "Urea (46-0-0)": [46, 0, 0],
-    "DAP (18-46-0)": [18, 46, 0],
-    "Cloruro de Potasio (0-0-60)": [0, 0, 60],
-    "Sulfato de Amonio (21-0-0)": [21, 0, 0],
-    "Sulpomag (0-0-22)": [0, 0, 22],
-    "17-6-18 (Cafetero)": [17, 6, 18],
-    "15-15-15 (Triple 15)": [15, 15, 15],
-    "Otro (Personalizado)": [0, 0, 0]
+    "Urea (46% N)": [46, 0, 0],
+    "DAP (18% N - 46% P)": [18, 46, 0],
+    "Cloruro Potasio (60% K)": [0, 0, 60],
+    "17-6-18 (Completo)": [17, 6, 18],
+    "Triple 15": [15, 15, 15]
 }
 
-st.set_page_config(page_title="Planificador N-P-K 2026", layout="wide")
+# --- ESTILOS PERSONALIZADOS ---
+st.markdown("""
+    <style>
+    .main { background-color: #f5f7f9; }
+    .stNumberInput, .stSelectbox { border: 2px solid #2e7d32 !important; }
+    div[data-testid="stMetricValue"] { color: #2e7d32; font-size: 1.8rem; }
+    .box-input { background-color: #ffffff; padding: 20px; border-radius: 15px; border-left: 5px solid #2196f3; margin-bottom: 20px; }
+    .box-result { background-color: #e8f5e9; padding: 20px; border-radius: 15px; border-left: 5px solid #4caf50; }
+    </style>
+    """, unsafe_allow_html=True)
 
-st.title("🌱 Sistema de Recomendación Nutricional N-P-K")
-st.markdown("Calcula las necesidades de fertilización según el cultivo y el aporte de Materia Orgánica.")
+st.title("🌱 FertiliApp: N-P-K")
+st.caption("Asistente de Fertilización de Precisión - Marzo 2026")
 
-# --- SECCIÓN 1: SELECCIÓN DE CULTIVO ---
-st.header("1. Requerimientos del Cultivo")
-col_c1, col_c2 = st.columns([1, 2])
+# --- SECCIÓN 1: REQUERIMIENTOS DEL CULTIVO ---
+st.subheader("1. Objetivo del Cultivo")
+with st.container():
+    col_a, col_b = st.columns(2)
+    crop_sel = col_a.selectbox("Cultivo:", list(CULTIVOS.keys()))
+    
+    # Valores base
+    base_n = CULTIVOS[crop_sel]["N"]
+    base_p = CULTIVOS[crop_sel]["P2O5"]
+    base_k = CULTIVOS[crop_sel]["K2O"]
 
-with col_c1:
-    seleccion_cultivo = st.selectbox("Seleccione el Sistema Productivo", list(CROP_DATABASE.keys()))
-    meta = CROP_DATABASE[seleccion_cultivo]
-    st.info(f"📋 **Nota:** {meta['Info']}")
+    req_n = st.number_input("Meta N (kg/ha)", value=float(base_n))
+    req_p = st.number_input("Meta P2O5 (kg/ha)", value=float(base_p))
+    req_k = st.number_input("Meta K2O (kg/ha)", value=float(base_k))
 
-with col_c2:
-    col_n, col_p, col_k = st.columns(3)
-    req_n = col_n.number_input("Req. N (kg/ha)", value=float(meta['N']))
-    req_p = col_p.number_input("Req. P2O5 (kg/ha)", value=float(meta['P2O5']))
-    req_k = col_k.number_input("Req. K2O (kg/ha)", value=float(meta['K2O']))
+# --- SECCIÓN 2: DATOS DEL ANÁLISIS DE SUELO (INPUT) ---
+st.markdown('<div class="box-input">', unsafe_allow_html=True)
+st.subheader("2. Resultados del Laboratorio")
+st.info("Ingrese los valores de su análisis de suelo:")
 
-# --- SECCIÓN 2: DATOS DEL SUELO ---
-st.header("2. Aporte del Suelo (Materia Orgánica)")
-with st.expander("Configurar parámetros del suelo"):
-    c1, c2, c3, c4 = st.columns(4)
-    mo = c1.number_input("Materia Orgánica (%)", 0.1, 15.0, 3.0)
-    da = c2.number_input("Densidad Aparente (g/cm³)", 0.8, 1.6, 1.2)
-    prof = c3.number_input("Profundidad (cm)", 10, 40, 20)
-    frac_min = c4.selectbox("Clima (Mineralización)", [0.015, 0.02, 0.03], 
-                           format_func=lambda x: "Frío (1.5%)" if x==0.015 else "Templado (2%)" if x==0.02 else "Cálido (3%)")
+mo_suelo = st.number_input("Materia Orgánica (%)", 0.0, 20.0, 3.0)
+p_ppm = st.number_input("Fósforo (ppm o mg/kg)", 0.0, 500.0, 15.0)
+k_meq = st.number_input("Potasio (meq/100g)", 0.0, 5.0, 0.25)
 
-# --- LÓGICA DE CÁLCULO ---
-# Nitrógeno mineralizado
+with st.expander("Configuración Física del Suelo"):
+    da = st.number_input("Densidad Aparente (g/cm³)", 0.5, 1.7, 1.25)
+    prof = st.number_input("Profundidad Muestreo (cm)", 10, 40, 20)
+    frac_min = st.select_slider("Mineralización N", options=[0.01, 0.02, 0.03], value=0.02)
+st.markdown('</div>', unsafe_allow_html=True)
+
+# --- LÓGICA DE CONVERSIÓN ---
+# 1. N disponible del suelo
 masa_suelo = (prof / 100) * 10000 * (da * 1000)
-n_suelo = (mo / 100) * masa_suelo * 0.05 * frac_min
-n_neto = max(0.0, req_n - n_suelo)
+n_disponible_suelo = (mo_suelo / 100) * masa_suelo * 0.05 * frac_min
 
-# --- SECCIÓN 3: PLAN DE FERTILIZACIÓN ---
-st.header("3. Elección de Fertilizantes")
-col_f1, col_f2 = st.columns(2)
+# 2. P disponible (Conversión ppm a kg/ha P2O5)
+# Factor simplificado: ppm * 2 (para 20cm) * 2.29 (P a P2O5)
+p_disponible_suelo = p_ppm * 2 * (prof / 20) * 2.29
 
-with col_f1:
-    st.subheader("Selección de Productos")
-    f_opcion = st.selectbox("Fertilizante Principal", list(FERTILIZANTES.keys()))
-    if f_opcion == "Otro (Personalizado)":
-        comp_n = st.number_input("% N", 0, 100, 0)
-        comp_p = st.number_input("% P2O5", 0, 100, 0)
-        comp_k = st.number_input("% K2O", 0, 100, 0)
-    else:
-        comp_n, comp_p, comp_k = FERTILIZANTES[f_opcion]
+# 3. K disponible (Conversión meq/100g a kg/ha K2O)
+# Factor: meq * 391 * DA * (Prof/10) * 1.2 (K a K2O)
+k_disponible_suelo = k_meq * 391 * da * (prof / 10) * 1.2
 
-    eficiencia = st.slider("Eficiencia global de la aplicación (%)", 30, 95, 60)
-    precio_ton = st.number_input("Precio por Tonelada (USD)", 200, 1500, 550)
+# --- SECCIÓN 3: CÁLCULO DE FERTILIZANTE ---
+st.subheader("3. Fertilizante a usar")
+fert_sel = st.selectbox("Seleccione Producto:", list(FERTILIZANTES.keys()))
+eficiencia = st.slider("Eficiencia de aplicación (%)", 20, 100, 60)
+precio_ton = st.number_input("Precio Tonelada (USD)", 200, 1500, 540)
 
-# CÁLCULOS FINALES
+# Déficit Neto
+def_n = max(0.0, req_n - n_disponible_suelo)
+def_p = max(0.0, req_p - (p_disponible_suelo * 0.2)) # Solo 20% del P del suelo suele ser disponible rápido
+def_k = max(0.0, req_k - (k_disponible_suelo * 0.5)) # Solo 50% del K del suelo
+
 # Ajuste por eficiencia
-n_ajustado = n_neto / (eficiencia/100)
-p_ajustado = req_p / (eficiencia/100)
-k_ajustado = req_k / (eficiencia/100)
+necesidad_real_n = def_n / (eficiencia/100)
 
-# Cálculo basado en el elemento limitante del fertilizante elegido (generalmente N)
-if comp_n > 0:
-    kg_ha_comercial = (n_ajustado / comp_n) * 100
+# Cantidad de producto comercial basado en N
+conc_n = FERTILIZANTES[fert_sel][0]
+if conc_n > 0:
+    kg_producto = (necesidad_real_n / conc_n) * 100
 else:
-    kg_ha_comercial = 0
+    kg_producto = 0
 
-costo_ha = (kg_ha_comercial / 1000) * precio_ton
+bultos = kg_producto / 50
+costo = (kg_producto / 1000) * precio_ton
 
-# --- RESULTADOS ---
-st.divider()
-res1, res2, res3, res4 = st.columns(4)
+# --- SECCIÓN 4: RESULTADOS (OUTPUT) ---
+st.markdown('<div class="box-result">', unsafe_allow_html=True)
+st.subheader("📊 Recomendación Final")
 
-res1.metric("Aporte Suelo (N)", f"{n_suelo:.1f} kg/ha")
-res2.metric("Déficit Neto (N)", f"{n_neto:.1f} kg/ha")
-res3.metric(f"Cantidad de {f_opcion}", f"{kg_ha_comercial:.1f} kg/ha")
-res4.metric("Costo Estimado", f"${costo_ha:.2f} USD")
+col1, col2 = st.columns(2)
+col1.metric("N del Suelo", f"{n_disponible_suelo:.1f} kg")
+col2.metric("P2O5 Suelo", f"{p_disponible_suelo:.1f} kg")
 
-# Tabla comparativa de necesidades
-st.subheader("Resumen de Necesidades Totales (Ajustado por Eficiencia)")
-df_resumen = pd.DataFrame({
-    "Elemento": ["Nitrógeno (N)", "Fósforo (P2O5)", "Potasio (K2O)"],
-    "Req. Cultivo (kg/ha)": [req_n, req_p, req_k],
-    "Aporte Suelo (kg/ha)": [round(n_suelo,1), 0, 0],
-    "Necesidad Real (c/Eficiencia)": [round(n_ajustado,1), round(p_ajustado,1), round(k_ajustado,1)]
-})
-st.table(df_resumen)
+st.write(f"Para cubrir el Nitrógeno con **{fert_sel}**:")
+st.success(f"### APLICAR: {kg_producto:.1f} kg/ha")
+st.info(f"Equivale a: **{bultos:.1f} bultos de 50kg**")
+st.metric("Inversión estimada", f"${costo:.2f} USD/ha")
 
-st.warning("⚠️ **Atención:** El aporte de P y K del suelo no se resta en este cálculo automático. Se recomienda consultar su análisis de suelo para ajustar P y K.")
+with st.expander("Ver balance P y K"):
+    st.write(f"Necesidad neta P2O5: {def_p:.1f} kg/ha")
+    st.write(f"Necesidad neta K2O: {def_k:.1f} kg/ha")
+    st.caption("Nota: El cálculo de bultos se basa en cubrir el Nitrógeno. Si el fertilizante es un complejo (N-P-K), verifique si los otros elementos quedan cubiertos.")
+st.markdown('</div>', unsafe_allow_html=True)
+
+st.warning("⚠️ Consulte siempre con un Ingeniero Agrónomo antes de la aplicación.")
