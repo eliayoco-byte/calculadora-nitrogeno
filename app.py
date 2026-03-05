@@ -32,7 +32,7 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 st.title("🌱 FertiliApp: N-P-K")
-st.caption("Asistente de Fertilización de Precisión - Marzo 2026")
+st.caption("Asistente de Fertilización de Precisión - William Fernando Cortes")
 
 # --- SECCIÓN 1: REQUERIMIENTOS DEL CULTIVO ---
 st.subheader("1. Objetivo del Cultivo")
