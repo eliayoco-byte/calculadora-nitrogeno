@@ -1,71 +1,103 @@
 import streamlit as st
 
 # Configuración de la página
-st.set_page_config(page_title="Calculadora de Nitrógeno 2026", page_icon="🌱")
+st.set_page_config(page_title="Calculadora de Fertilización N - 2026", page_icon="🌾")
 
-def calcular_nitrogeno_pro(mo, da, prof, req, frac_min, eficiencia, precio_urea):
-    # Masa de suelo (kg/ha)
+# Diccionario de fertilizantes comunes y su % de Nitrógeno
+FERTILIZANTES = {
+    "Urea": 46,
+    "Nitrato de Amonio": 33.5,
+    "Sulfato de Amonio": 21,
+    "UAN (Solución líquida)": 32,
+    "DAP (Fosfato Diamónico)": 18,
+    "MAP (Fosfato Monoamónico)": 11,
+    "Otro (Personalizado)": 0
+}
+
+def calcular_fertilizacion(mo, da, prof, req, frac_min, eficiencia, n_porcentaje, precio_ton):
+    # 1. Masa de suelo (kg/ha)
     volumen_suelo_m3 = (prof / 100) * 10000
     masa_suelo_kg = volumen_suelo_m3 * (da * 1000)
     
-    # N mineralizado (kg N/ha) - Asumiendo 5% de N en la MO
+    # 2. N mineralizado del suelo (kg N/ha)
     n_mineralizado = (mo / 100) * masa_suelo_kg * 0.05 * frac_min
     
-    # N neto a aplicar ajustado por eficiencia
+    # 3. Déficit y ajuste por eficiencia
     deficit_n = max(0.0, req - n_mineralizado)
-    n_aplicar_ajustado = deficit_n / (eficiencia / 100)
+    n_necesario_real = deficit_n / (eficiencia / 100)
     
-    # Convertir a Urea (46% N)
-    kg_urea = n_aplicar_ajustado / 0.46
-    bultos_50kg = kg_urea / 50
-    costo_total = (kg_urea / 1000) * precio_urea
-    
-    return n_mineralizado, n_aplicar_ajustado, kg_urea, bultos_50kg, costo_total
+    # 4. Cálculo del fertilizante comercial
+    if n_porcentaje > 0:
+        kg_fertilizante = n_necesario_real / (n_porcentaje / 100)
+        bultos_50kg = kg_fertilizante / 50
+        costo_total = (kg_fertilizante / 1000) * precio_ton
+    else:
+        kg_fertilizante = bultos_50kg = costo_total = 0
 
-# --- INTERFAZ DE USUARIO ---
-st.title("🌱 Calculadora de Fertilización Nitrogenada")
-st.markdown("""
-Esta herramienta estima la dosis de Nitrógeno basada en el aporte de la Materia Orgánica del suelo.
-*Actualizado: Marzo 2026*
-""")
+    return n_mineralizado, n_necesario_real, kg_fertilizante, bultos_50kg, costo_total
 
-# Dividir en columnas para los datos de entrada
+# --- INTERFAZ ---
+st.title("🌾 Calculadora de Nitrógeno Multiproducto")
+st.markdown("Calcule la dosis exacta según el tipo de fertilizante y el aporte de su suelo.")
+
+# Sidebar para parámetros económicos y de suelo
+st.sidebar.header("⚙️ Configuración del Suelo")
+mo = st.sidebar.number_input("Materia Orgánica (%)", 0.1, 20.0, 3.2)
+da = st.sidebar.number_input("Densidad Aparente (g/cm³)", 0.5, 1.8, 1.3)
+prof = st.sidebar.slider("Profundidad de Raíces (cm)", 10, 60, 20)
+frac_min = st.sidebar.select_slider("Tasa de Mineralización", 
+                                   options=[0.01, 0.015, 0.02, 0.03, 0.04], 
+                                   value=0.02,
+                                   help="Baja (Frío) -> Alta (Cálido)")
+
+# Panel Principal
 col1, col2 = st.columns(2)
 
 with col1:
-    st.subheader("Datos del Suelo")
-    mo = st.number_input("Materia Orgánica (%)", min_value=0.1, max_value=20.0, value=3.2, step=0.1)
-    da = st.number_input("Densidad Aparente (g/cm³)", min_value=0.5, max_value=1.8, value=1.3, step=0.05)
-    prof = st.number_input("Profundidad de muestreo (cm)", min_value=10, max_value=100, value=20)
+    st.subheader("🎯 Objetivo")
+    req = st.number_input("Requerimiento Cultivo (kg N/ha)", 0, 500, 150)
+    eficiencia = st.slider("Eficiencia de Aplicación (%)", 10, 100, 60, 
+                          help="Urea al voleo: 40-60%. Enterado/Inyectado: 70-85%.")
 
 with col2:
-    st.subheader("Datos del Cultivo")
-    req = st.number_input("Requerimiento del Cultivo (kg N/ha)", min_value=0, max_value=500, value=150)
-    eficiencia = st.slider("Eficiencia de aplicación (%)", 10, 100, 60)
-    frac_min = st.selectbox("Tasa de Mineralización anual", 
-                            options=[0.015, 0.02, 0.03], 
-                            format_func=lambda x: f"{x*100}% (Clima {'Frío' if x<0.02 else 'Templado' if x==0.02 else 'Cálido'})")
-
-st.sidebar.header("Costos y Fertilizante")
-precio_urea = st.sidebar.number_input("Precio Tonelada Urea (USD)", value=530.0)
-
-# Botón de cálculo
-if st.button("Calcular Dosis Ahora"):
-    n_min, n_total, kg_urea, bultos, costo = calcular_nitrogeno_pro(mo, da, prof, req, frac_min, eficiencia, precio_urea)
+    st.subheader("🧪 Fertilizante")
+    nombre_f = st.selectbox("Seleccione Fertilizante", list(FERTILIZANTES.keys()))
     
-    # Mostrar resultados en tarjetas
+    if nombre_f == "Otro (Personalizado)":
+        n_puro = st.number_input("% Nitrógeno del producto", 1.0, 100.0, 20.0)
+    else:
+        n_puro = FERTILIZANTES[nombre_f]
+        st.info(f"Concentración de N: {n_puro}%")
+    
+    precio_ton = st.number_input(f"Precio Tonelada {nombre_f} (USD)", 100.0, 2000.0, 530.0)
+
+# Cálculo
+if st.button("CALCULAR DOSIS", use_container_width=True):
+    n_min, n_real, kg_fert, bultos, costo = calcular_fertilizacion(
+        mo, da, prof, req, frac_min, eficiencia, n_puro, precio_ton
+    )
+
     st.divider()
-    c1, c2, c3 = st.columns(3)
-    c1.metric("N Suelo (Aporta)", f"{n_min:.1f} kg/ha")
-    c2.metric("N Neto a Aplicar", f"{n_total:.1f} kg/ha")
-    c3.metric("Costo Estimado", f"${costo:.2f} USD")
     
-    st.success(f"### Recomendación: Aplicar **{kg_urea:.1f} kg de Urea** por hectárea.")
-    st.info(f"Equivale aproximadamente a **{bultos:.1f} bultos** (de 50kg) por hectárea.")
+    # Métricas clave
+    m1, m2, m3 = st.columns(3)
+    m1.metric("Aporte Suelo", f"{n_min:.1f} kg N/ha")
+    m2.metric("Necesidad Real", f"{n_real:.1f} kg N/ha")
+    m3.metric("Costo Total", f"${costo:.2f} USD")
+
+    # Resultado destacado
+    st.success(f"### Aplicar: **{kg_fert:.1f} kg/ha** de {nombre_f}")
+    st.write(f"📦 Equivalente a: **{bultos:.1f} bultos de 50kg**")
+
+    # Advertencias agronómicas
+    if nombre_f == "Urea" and eficiencia < 50:
+        st.warning("⚠️ **Pérdidas altas:** Estás perdiendo mucha Urea por volatilización. Considera enterrarla o usar un inhibidor de ureasa.")
     
-    # Recomendación técnica adicional
-    if bultos > 4:
-        st.warning("⚠️ **Nota:** La dosis es alta. Se recomienda fraccionar en 2 o 3 aplicaciones para evitar pérdidas por lixiviación.")
+    if n_real > 180:
+        st.error("🚨 **Dosis Excesiva:** Aplicar más de 180kg de N puro en una sola vez puede quemar raíces o contaminar acuíferos. **¡Fracciona la dosis!**")
+
+    if "Fosfato" in nombre_f:
+        st.info("💡 **Nota:** Este producto también aporta Fósforo (P). Ajusta tu plan de fertilización fosfatada.")
 
 st.markdown("---")
-st.caption("Fórmula: N_disp = MO% * Masa_Suelo * 0.05 * Tasa_Min. Eficiencia aplicada al déficit.")
+st.caption("© 2026 - Herramienta de Soporte a Decisiones Agronómicas")
